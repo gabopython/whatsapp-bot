@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WhatsApp Messages</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f5f7f8;
+      color: #182026;
+    }
+    main {
+      max-width: 760px;
+      margin: 32px auto;
+      padding: 0 16px;
+    }
+    h1 {
+      font-size: 28px;
+      margin: 0 0 20px;
+    }
+    form, table {
+      width: 100%;
+      background: white;
+      border: 1px solid #d8dee4;
+      border-radius: 8px;
+    }
+    form {
+      box-sizing: border-box;
+      padding: 16px;
+      display: grid;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    label {
+      display: grid;
+      gap: 6px;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    input, textarea, button {
+      font: inherit;
+    }
+    input, textarea {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #c5ccd3;
+      border-radius: 6px;
+    }
+    textarea {
+      min-height: 96px;
+      resize: vertical;
+    }
+    button {
+      justify-self: start;
+      border: 0;
+      border-radius: 6px;
+      padding: 10px 14px;
+      color: white;
+      background: #16794c;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: .7;
+      cursor: wait;
+    }
+    table {
+      border-collapse: collapse;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid #e5e9ed;
+      text-align: left;
+      vertical-align: top;
+      font-size: 14px;
+    }
+    th {
+      background: #eef2f4;
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+    tr:last-child td {
+      border-bottom: 0;
+    }
+    .status {
+      margin: 0 0 12px;
+      min-height: 20px;
+      color: #4b5560;
+    }
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 12px;
+    }
+    .toolbar input {
+      max-width: 220px;
+    }
+    .toolbar button {
+      padding: 8px 10px;
+      background: #245b7a;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>WhatsApp Messages</h1>
+
+    <form id="send-form">
+      <label>
+        Phone number
+        <input name="to" placeholder="593962052098" required>
+      </label>
+      <label>
+        Message
+        <textarea name="body" placeholder="What can I help you today?" required></textarea>
+      </label>
+      <button type="submit">Send</button>
+    </form>
+
+    <p class="status" id="status"></p>
+
+    <div class="toolbar">
+      <input id="phone-filter" placeholder="Filter by phone">
+      <button type="button" id="prev-page">Previous</button>
+      <button type="button" id="next-page">Next</button>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Dir</th>
+          <th>Phone</th>
+          <th>Message</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody id="messages"></tbody>
+    </table>
+  </main>
+
+  <script>
+    const form = document.querySelector("#send-form");
+    const statusEl = document.querySelector("#status");
+    const tableBody = document.querySelector("#messages");
+    const phoneFilter = document.querySelector("#phone-filter");
+    const prevPage = document.querySelector("#prev-page");
+    const nextPage = document.querySelector("#next-page");
+    const pageSize = 50;
+    let offset = 0;
+
+    async function loadMessages() {
+      const params = new URLSearchParams({ limit: pageSize, offset });
+      if (phoneFilter.value.trim()) params.set("phone", phoneFilter.value.trim());
+      const response = await fetch(`/messages?${params}`);
+      const messages = await response.json();
+      tableBody.innerHTML = messages.map((message) => `
+        <tr>
+          <td>${new Date(message.created_at).toLocaleString()}</td>
+          <td>${message.direction}</td>
+          <td>${message.phone}</td>
+          <td>${escapeHtml(message.body)}</td>
+          <td>${message.status}</td>
+        </tr>
+      `).join("");
+      prevPage.disabled = offset === 0;
+      nextPage.disabled = messages.length < pageSize;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = form.querySelector("button");
+      button.disabled = true;
+      statusEl.textContent = "Sending...";
+
+      try {
+        const response = await fetch("/send", {
+          method: "POST",
+          body: new FormData(form)
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || "Send failed");
+        statusEl.textContent = "Message sent.";
+        form.reset();
+        offset = 0;
+        await loadMessages();
+      } catch (error) {
+        statusEl.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    phoneFilter.addEventListener("input", () => {
+      offset = 0;
+      loadMessages();
+    });
+    prevPage.addEventListener("click", () => {
+      offset = Math.max(0, offset - pageSize);
+      loadMessages();
+    });
+    nextPage.addEventListener("click", () => {
+      offset += pageSize;
+      loadMessages();
+    });
+
+    loadMessages();
+    setInterval(loadMessages, 5000);
+  </script>
+</body>
+</html>
