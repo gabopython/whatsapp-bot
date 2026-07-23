@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -29,27 +28,27 @@ WEBHOOK_QUEUE_SIZE = int(os.getenv("WEBHOOK_QUEUE_SIZE", "1000"))
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now().isoformat()
 
 
 class Base(DeclarativeBase):
     pass
 
 
-class Message(Base):
-    __tablename__ = "messages"
+class Conversation(Base):
+    __tablename__ = "conversations"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    direction: Mapped[str] = mapped_column(String(8), nullable=False)
-    phone: Mapped[str] = mapped_column(String(32), index=True, nullable=False)
-    body: Mapped[str] = mapped_column(Text, nullable=False)
-    whatsapp_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    status: Mapped[str] = mapped_column(String(32), default="stored", nullable=False)
-    raw_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    phone: Mapped[str] = mapped_column(String(32), index=True, nullable=False, unique=True)
+    messages: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[str] = mapped_column(
         String(64),
         default=now_iso,
-        index=True,
+        nullable=False,
+    )
+    updated_at: Mapped[str] = mapped_column(
+        String(64),
+        default=now_iso,
         nullable=False,
     )
 
@@ -82,10 +81,6 @@ http_client: httpx.AsyncClient | None = None
 async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        await conn.exec_driver_sql(
-            "CREATE INDEX IF NOT EXISTS ix_messages_phone_created_at "
-            "ON messages (phone, created_at DESC)"
-        )
 
 
 async def save_message(
@@ -94,22 +89,26 @@ async def save_message(
     direction: str,
     phone: str,
     body: str,
-    whatsapp_message_id: str | None = None,
-    status: str = "stored",
-    raw_json: Any = None,
-) -> int:
-    message = Message(
-        direction=direction,
-        phone=phone,
-        body=body,
-        whatsapp_message_id=whatsapp_message_id,
-        status=status,
-        raw_json=json.dumps(raw_json) if raw_json is not None else None,
+) -> str:
+    conversation = await session.scalar(
+        select(Conversation).where(Conversation.phone == phone)
     )
-    session.add(message)
+
+    message_line = f"{direction}:{body}"
+
+    if conversation:
+        conversation.messages += "\n" + message_line
+        conversation.updated_at = now_iso()
+    else:
+        conversation = Conversation(
+            phone=phone,
+            messages=message_line,
+        )
+        session.add(conversation)
+
     await session.commit()
-    await session.refresh(message)
-    return message.id
+    await session.refresh(conversation)
+    return conversation.phone
 
 
 async def send_whatsapp_text(to: str, body: str) -> dict[str, Any]:
@@ -171,12 +170,9 @@ async def store_webhook_messages(payload: dict[str, Any]) -> int:
 
                     await save_message(
                         session,
-                        direction="in",
+                        direction="them",
                         phone=message.get("from", ""),
                         body=body,
-                        whatsapp_message_id=message.get("id"),
-                        status="received",
-                        raw_json=message,
                     )
                     stored += 1
     return stored
@@ -222,22 +218,20 @@ async def list_messages(
     offset: int = Query(0, ge=0),
     phone: str | None = None,
 ) -> list[dict[str, Any]]:
-    statement = select(Message)
+    statement = select(Conversation)
     if phone:
-        statement = statement.where(Message.phone == phone)
-    statement = statement.order_by(desc(Message.created_at)).limit(limit).offset(offset)
+        statement = statement.where(Conversation.phone == phone)
+    statement = statement.order_by(desc(Conversation.updated_at)).limit(limit).offset(offset)
 
     async with SessionLocal() as session:
         rows = (await session.scalars(statement)).all()
         return [
             {
                 "id": row.id,
-                "direction": row.direction,
                 "phone": row.phone,
-                "body": row.body,
-                "whatsapp_message_id": row.whatsapp_message_id,
-                "status": row.status,
+                "messages": row.messages,
                 "created_at": row.created_at,
+                "updated_at": row.updated_at,
             }
             for row in rows
         ]
@@ -246,21 +240,15 @@ async def list_messages(
 @app.post("/send")
 async def send_message(to: str = Form(...), body: str = Form(...)) -> dict[str, Any]:
     response = await send_whatsapp_text(to=to, body=body)
-    message_id = None
-    if response.get("messages"):
-        message_id = response["messages"][0].get("id")
 
     async with SessionLocal() as session:
-        local_id = await save_message(
+        phone = await save_message(
             session,
-            direction="out",
+            direction="me",
             phone=to,
             body=body,
-            whatsapp_message_id=message_id,
-            status="sent",
-            raw_json=response,
         )
-    return {"ok": True, "id": local_id, "meta_response": response}
+    return {"ok": True, "phone": phone, "meta_response": response}
 
 
 @app.get("/webhook")
