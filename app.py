@@ -83,6 +83,70 @@ async def init_db() -> None:
         await conn.run_sync(Base.metadata.create_all)
 
 
+def normalize_message_body(message: dict[str, Any]) -> str:
+    message_type = message.get("type", "")
+    if message_type == "text":
+        return message.get("text", {}).get("body", "")
+
+    if message_type in {"image", "video"}:
+        media_payload = message.get(message_type) or {}
+        caption = (
+            message.get("caption", {}).get("body", "")
+            or message.get("text", {}).get("body", "")
+        )
+        media_url = media_payload.get("url") or media_payload.get("id") or ""
+        if caption:
+            return f"media:{message_type}:{media_url}|{caption}"
+        return f"media:{message_type}:{media_url}"
+
+    return f"[{message_type} message]"
+
+
+async def resolve_media_url(message: dict[str, Any]) -> str:
+    message_type = message.get("type", "")
+    if message_type not in {"image", "video"}:
+        return ""
+
+    media_payload = message.get(message_type) or {}
+    media_url = media_payload.get("url") or ""
+    if media_url:
+        return media_url
+
+    media_id = media_payload.get("id") or ""
+    if not media_id:
+        return ""
+
+    if http_client is None:
+        return media_id
+
+    response = await http_client.get(f"https://graph.facebook.com/{API_VERSION}/{media_id}")
+    if response.is_error:
+        logger.warning("Failed to resolve media URL for %s: %s", media_id, response.text)
+        return media_id
+
+    data = response.json()
+    return data.get("url") or media_id
+
+
+async def build_message_body(message: dict[str, Any]) -> str:
+    message_type = message.get("type", "")
+    if message_type == "text":
+        return message.get("text", {}).get("body", "")
+
+    if message_type in {"image", "video"}:
+        media_payload = message.get(message_type) or {}
+        caption = (
+            message.get("caption", {}).get("body", "")
+            or message.get("text", {}).get("body", "")
+        )
+        media_url = await resolve_media_url(message)
+        if caption:
+            return f"media:{message_type}:{media_url}|{caption}"
+        return f"media:{message_type}:{media_url}"
+
+    return f"[{message_type} message]"
+
+
 async def save_message(
     session: AsyncSession,
     *,
@@ -162,11 +226,7 @@ async def store_webhook_messages(payload: dict[str, Any]) -> int:
             for change in entry.get("changes", []):
                 value = change.get("value", {})
                 for message in value.get("messages", []):
-                    message_type = message.get("type", "")
-                    if message_type == "text":
-                        body = message.get("text", {}).get("body", "")
-                    else:
-                        body = f"[{message_type} message]"
+                    body = await build_message_body(message)
 
                     await save_message(
                         session,
