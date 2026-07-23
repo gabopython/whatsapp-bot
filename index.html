@@ -46,6 +46,7 @@
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      min-height: 0;
     }
     .search-box {
       padding: 8px 12px;
@@ -61,7 +62,7 @@
     }
     .chat-list {
       flex: 1;
-      overflow-y: auto;
+      overflow-y: scroll;
       list-style: none;
     }
     .chat-item {
@@ -102,6 +103,7 @@
       display: flex;
       flex-direction: column;
       background: #fff;
+      min-height: 0;
     }
     .no-chat {
       flex: 1;
@@ -145,7 +147,7 @@
     .messages-view {
       flex: 1;
       min-height: 0;
-      overflow-y: auto;
+      overflow-y: scroll;
       padding: 16px;
       background: #fff;
       display: flex;
@@ -164,7 +166,7 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
-      min-height: 100%;
+      min-height: 0;
     }
     .message-line {
       display: flex;
@@ -208,6 +210,31 @@
       color: #666;
       font-size: 13px;
       min-height: 20px;
+    }
+
+    /* Custom visible scrollbars */
+    .chat-list,
+    .messages-view {
+      scrollbar-width: thin;
+      scrollbar-color: #b7b7b7 #f0f0f0;
+    }
+    .chat-list::-webkit-scrollbar,
+    .messages-view::-webkit-scrollbar {
+      width: 10px;
+    }
+    .chat-list::-webkit-scrollbar-track,
+    .messages-view::-webkit-scrollbar-track {
+      background: #f0f0f0;
+    }
+    .chat-list::-webkit-scrollbar-thumb,
+    .messages-view::-webkit-scrollbar-thumb {
+      background-color: #b7b7b7;
+      border-radius: 6px;
+      border: 2px solid #f0f0f0;
+    }
+    .chat-list::-webkit-scrollbar-thumb:hover,
+    .messages-view::-webkit-scrollbar-thumb:hover {
+      background-color: #128c7e;
     }
   </style>
 </head>
