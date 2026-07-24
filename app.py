@@ -10,6 +10,8 @@ from typing import Any
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, Query, Request
+
+from message_handler import handle_incoming_message
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import Integer, String, Text, desc, event, inspect, select, text
@@ -304,13 +306,20 @@ async def store_webhook_messages(payload: dict[str, Any]) -> int:
             for change in entry.get("changes", []):
                 value = change.get("value", {})
                 for message in value.get("messages", []):
+                    phone = message.get("from", "")
                     body = await build_message_body(message)
 
                     await save_message(
                         session,
                         direction="them",
-                        phone=message.get("from", ""),
+                        phone=phone,
                         body=body,
+                    )
+
+                    await handle_incoming_message(
+                        phone=phone,
+                        body=body,
+                        send_reply=lambda to, reply: send_whatsapp_text(to=to, body=reply),
                     )
                     stored += 1
     return stored
