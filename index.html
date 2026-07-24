@@ -28,10 +28,46 @@
       color: white;
       padding: 16px;
       box-shadow: 0 2px 5px rgba(0,0,0,.1);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     }
     .header h1 {
       font-size: 18px;
       font-weight: 600;
+    }
+    .refresh-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      background: rgba(255,255,255,0.15);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.4);
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: background 0.15s;
+    }
+    .refresh-btn:hover {
+      background: rgba(255,255,255,0.28);
+    }
+    .refresh-btn:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+    .refresh-btn svg {
+      width: 14px;
+      height: 14px;
+      transition: transform 0.4s ease;
+    }
+    .refresh-btn.spinning svg {
+      animation: spin 0.6s linear;
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
     }
     .container {
       display: flex;
@@ -265,6 +301,14 @@
   <main>
     <div class="header">
       <h1>WhatsApp</h1>
+      <button id="refresh-btn" class="refresh-btn" type="button" title="Refresh conversations">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M23 4v6h-6"></path>
+          <path d="M1 20v-6h6"></path>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+        <span>Refresh</span>
+      </button>
     </div>
 
     <div class="container">
@@ -320,6 +364,7 @@
     const saveTagsBtn = document.querySelector("#save-tags-btn");
     const cancelTagsBtn = document.querySelector("#cancel-tags-btn");
     const tagsInput = document.querySelector("#tags-input");
+    const refreshBtn = document.querySelector("#refresh-btn");
     const pageSize = 50;
     let offset = 0;
     let selectedPhone = null;
@@ -349,6 +394,29 @@
       const response = await fetch(`/messages?${params}`);
       allConversations = await response.json();
       renderChatList();
+
+      // Keep the open chat's messages/tags in sync with the fresh data.
+      if (selectedPhone) {
+        const conv = allConversations.find(c => c.phone === selectedPhone);
+        if (conv) {
+          chatMeta.textContent = `Updated ${new Date(conv.updated_at).toLocaleString()}`;
+          if (chatTagsEdit.style.display !== "flex") {
+            displayTags(conv);
+          }
+          renderMessages(conv.messages);
+        }
+      }
+    }
+
+    async function refreshConversations() {
+      refreshBtn.disabled = true;
+      refreshBtn.classList.add("spinning");
+      try {
+        await loadConversations();
+      } finally {
+        refreshBtn.disabled = false;
+        refreshBtn.classList.remove("spinning");
+      }
     }
 
     function escapeHtml(text) {
@@ -456,6 +524,10 @@
       loadConversations();
     });
 
+    refreshBtn.addEventListener("click", () => {
+      refreshConversations();
+    });
+
     editTagsBtn.addEventListener("click", () => {
       chatTagsDisplay.parentElement.style.display = "none";
       chatTagsEdit.style.display = "flex";
@@ -540,7 +612,6 @@
     });
 
     loadConversations();
-    setInterval(loadConversations, 3000);
   </script>
 </body>
 </html>
