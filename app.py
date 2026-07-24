@@ -316,10 +316,19 @@ async def store_webhook_messages(payload: dict[str, Any]) -> int:
                         body=body,
                     )
 
+                    async def persist_reply(to: str, reply: str) -> None:
+                        await save_message(
+                            session,
+                            direction="me",
+                            phone=to,
+                            body=reply,
+                        )
+
                     await handle_incoming_message(
                         phone=phone,
                         body=body,
                         send_reply=lambda to, reply: send_whatsapp_text(to=to, body=reply),
+                        persist_reply=persist_reply,
                     )
                     stored += 1
     return stored

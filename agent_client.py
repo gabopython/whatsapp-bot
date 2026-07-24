@@ -6,7 +6,7 @@ class AgentClient:
     MODEL_AGENT = "qwen3:8b"       # Model A: instruction following, tool use, reasoning
     MODEL_ROUTER = "qwen3.5:4b"    # Model B: classification, labeling, routing
 
-    def __init__(self, base_url: str = "http://192.168.1.42:11434"):
+    def __init__(self, base_url: str = "http://192.168.1.121:11434"):
         self.base_url = base_url
         self.client = httpx.AsyncClient(timeout=60.0)
 

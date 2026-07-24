@@ -30,6 +30,26 @@ class IncomingMessageHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(agent_client.prompts), 1)
         self.assertIn("hello", agent_client.prompts[0])
 
+    async def test_handler_persists_outbound_reply_when_persist_callback_is_provided(self) -> None:
+        class DummyAgentClient:
+            async def generate_agent(self, prompt: str) -> str:
+                return "thanks"
+
+        persisted_messages: list[tuple[str, str]] = []
+
+        async def fake_persist(phone: str, body: str) -> None:
+            persisted_messages.append((phone, body))
+
+        await handle_incoming_message(
+            phone="+593987654321",
+            body="hello",
+            agent_client=DummyAgentClient(),
+            send_reply=None,
+            persist_reply=fake_persist,
+        )
+
+        self.assertEqual(persisted_messages, [("+593987654321", "thanks")])
+
 
 if __name__ == "__main__":
     unittest.main()
