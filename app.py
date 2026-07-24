@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import Integer, String, Text, desc, event, select
+from sqlalchemy import Integer, String, Text, desc, event, inspect, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -46,6 +46,8 @@ class Conversation(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     phone: Mapped[str] = mapped_column(String(32), index=True, nullable=False, unique=True)
     messages: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    sent_messages_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tags: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[str] = mapped_column(
         String(64),
         default=now_iso,
@@ -83,9 +85,23 @@ worker_task: asyncio.Task[None] | None = None
 http_client: httpx.AsyncClient | None = None
 
 
+def _ensure_conversation_columns(sync_conn: Any) -> None:
+    inspector = inspect(sync_conn)
+    existing_columns = {column["name"] for column in inspector.get_columns("conversations")}
+
+    if "sent_messages_count" not in existing_columns:
+        sync_conn.execute(
+            text("ALTER TABLE conversations ADD COLUMN sent_messages_count INTEGER NOT NULL DEFAULT 0")
+        )
+
+    if "tags" not in existing_columns:
+        sync_conn.execute(text("ALTER TABLE conversations ADD COLUMN tags TEXT NOT NULL DEFAULT ''"))
+
+
 async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_ensure_conversation_columns)
 
 
 def normalize_message_body(message: dict[str, Any]) -> str:
@@ -208,6 +224,7 @@ async def save_message(
     direction: str,
     phone: str,
     body: str,
+    tags: str = "",
 ) -> str:
     conversation = await session.scalar(
         select(Conversation).where(Conversation.phone == phone)
@@ -218,10 +235,16 @@ async def save_message(
     if conversation:
         conversation.messages += "\n" + message_line
         conversation.updated_at = now_iso()
+        if direction == "me":
+            conversation.sent_messages_count += 1
+        if tags:
+            conversation.tags = tags
     else:
         conversation = Conversation(
             phone=phone,
             messages=message_line,
+            sent_messages_count=1 if direction == "me" else 0,
+            tags=tags,
         )
         session.add(conversation)
 
@@ -349,6 +372,8 @@ async def list_messages(
                 "id": row.id,
                 "phone": row.phone,
                 "messages": row.messages,
+                "sent_messages_count": row.sent_messages_count,
+                "tags": row.tags,
                 "created_at": row.created_at,
                 "updated_at": row.updated_at,
             }
@@ -357,7 +382,11 @@ async def list_messages(
 
 
 @app.post("/send")
-async def send_message(to: str = Form(...), body: str = Form(...)) -> dict[str, Any]:
+async def send_message(
+    to: str = Form(...),
+    body: str = Form(...),
+    tags: str = Form(default=""),
+) -> dict[str, Any]:
     response = await send_whatsapp_text(to=to, body=body)
 
     async with SessionLocal() as session:
@@ -366,6 +395,7 @@ async def send_message(to: str = Form(...), body: str = Form(...)) -> dict[str, 
             direction="me",
             phone=to,
             body=body,
+            tags=tags,
         )
     return {"ok": True, "phone": phone, "meta_response": response}
 

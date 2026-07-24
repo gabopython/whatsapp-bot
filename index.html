@@ -38,6 +38,7 @@
       gap: 0;
       flex: 1;
       overflow: hidden;
+      min-height: 0;
     }
     .sidebar {
       width: 320px;
@@ -64,6 +65,7 @@
       flex: 1;
       overflow-y: scroll;
       list-style: none;
+      min-height: 0;
     }
     .chat-item {
       padding: 8px 12px;
@@ -112,6 +114,12 @@
       justify-content: center;
       color: #999;
       font-size: 14px;
+    }
+    .chat-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
     }
     .send-form {
       padding: 12px;
@@ -166,7 +174,7 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
-      min-height: 0;
+      flex-shrink: 0;
     }
     .message-line {
       display: flex;
@@ -254,7 +262,7 @@
 
       <div class="chat-view">
         <div id="no-chat" class="no-chat">Select a chat to view messages</div>
-        <div id="chat-content" style="display: none; flex: 1; display: flex; flex-direction: column;">
+        <div id="chat-content" class="chat-content" style="display: none;">
           <div style="padding: 16px; border-bottom: 1px solid #e5e5e5;">
             <div id="chat-title" style="font-size: 16px; font-weight: 600;"></div>
             <div id="chat-meta" style="font-size: 12px; color: #999;"></div>

@@ -1,5 +1,7 @@
 .env
 .venv/
 messages.db
+messages.db-*
+media/
 __pycache__/
 *.pyc

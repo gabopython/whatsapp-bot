@@ -1,6 +1,11 @@
+import os
 import unittest
 
-from app import normalize_message_body
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+
+from sqlalchemy import select
+
+from app import Conversation, SessionLocal, init_db, normalize_message_body, save_message
 
 
 class MediaMessageParsingTests(unittest.TestCase):
@@ -23,6 +28,32 @@ class MediaMessageParsingTests(unittest.TestCase):
             normalize_message_body(message),
             "media:video:https://example.com/video.mp4",
         )
+
+
+class ConversationPersistenceTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        await init_db()
+
+    async def test_save_message_increments_sent_count_and_stores_tags(self) -> None:
+        async with SessionLocal() as session:
+            phone = await save_message(
+                session,
+                direction="me",
+                phone="+123456789",
+                body="hello",
+                tags="vip",
+            )
+
+        self.assertEqual(phone, "+123456789")
+
+        async with SessionLocal() as session:
+            conversation = await session.scalar(
+                select(Conversation).where(Conversation.phone == "+123456789")
+            )
+
+        self.assertIsNotNone(conversation)
+        self.assertEqual(conversation.sent_messages_count, 1)
+        self.assertEqual(conversation.tags, "vip")
 
 
 if __name__ == "__main__":
