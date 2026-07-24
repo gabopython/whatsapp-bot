@@ -1,3 +1,5 @@
+import os
+
 import httpx
 
 
@@ -8,7 +10,8 @@ class AgentClient:
 
     def __init__(self, base_url: str = "http://192.168.1.121:11434"):
         self.base_url = base_url
-        self.client = httpx.AsyncClient(timeout=60.0)
+        timeout = float(os.getenv("LLM_TIMEOUT_SECONDS", "180"))
+        self.client = httpx.AsyncClient(timeout=httpx.Timeout(timeout))
 
     async def generate(self, model: str, prompt: str) -> str:
         response = await self.client.post(

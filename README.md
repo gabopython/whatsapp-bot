@@ -22,6 +22,7 @@ DATABASE_URL=sqlite+aiosqlite:///messages.db
 DB_POOL_SIZE=5
 DB_MAX_OVERFLOW=10
 WEBHOOK_QUEUE_SIZE=1000
+LLM_TIMEOUT_SECONDS=180
 ```
 
 For Postgres, set:

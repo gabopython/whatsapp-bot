@@ -315,6 +315,9 @@ async def store_webhook_messages(payload: dict[str, Any]) -> int:
                         phone=phone,
                         body=body,
                     )
+                    conversation = await session.scalar(
+                        select(Conversation).where(Conversation.phone == phone)
+                    )
 
                     async def persist_reply(to: str, reply: str) -> None:
                         await save_message(
@@ -327,6 +330,7 @@ async def store_webhook_messages(payload: dict[str, Any]) -> int:
                     await handle_incoming_message(
                         phone=phone,
                         body=body,
+                        conversation_history=conversation.messages if conversation else body,
                         send_reply=lambda to, reply: send_whatsapp_text(to=to, body=reply),
                         persist_reply=persist_reply,
                     )
