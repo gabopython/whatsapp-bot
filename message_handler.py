@@ -36,7 +36,7 @@ async def handle_incoming_message(
         f"   - Bachata (fusión, actual, tradicional, etc.)\n"
         f"   - Salsa (línea, cubana, on2, etc.)\n\n"
         f"5. El siguiente paso es una entrevista presencial en el cc Recreo, pregunta día y hora.\n"
-        f"Si un dato no es compartido no insistas y continua\n\n"
+        f"\nSi un dato no es compartido no insistas y continua\n\n"
         f"No digas la ubicación de Big Dance, solo si preguntan: multifamiliares Luluncoto a lado del colegio Montufar Quito\n\n"
         f"Sé amable, profesional y clara en cada mensaje. Espera la respuesta antes de pasar al siguiente paso y responde máximo con 25 palabras.\n\n"
         f"Conversation messages:\n{messages}\n"
