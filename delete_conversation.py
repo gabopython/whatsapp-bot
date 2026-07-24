@@ -7,7 +7,21 @@ from sqlalchemy import delete, select
 
 from app import Conversation, SessionLocal, init_db
 
-DEFAULT_PHONE: Final[str] = "593962052098"
+DEFAULT_PHONES: Final[tuple[str, ...]] = (
+    "593962052098",
+    "593998435259",
+    "593996818841",
+)
+
+
+def _normalize_phone_list(values: list[str]) -> list[str]:
+    phones: list[str] = []
+    for value in values:
+        for part in value.split(","):
+            phone = part.strip()
+            if phone:
+                phones.append(phone)
+    return phones
 
 
 async def delete_conversation_by_phone(phone: str, *, dry_run: bool = False) -> int:
@@ -30,17 +44,25 @@ async def delete_conversation_by_phone(phone: str, *, dry_run: bool = False) -> 
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Delete a conversation from the database by phone number")
-    parser.add_argument("--phone", default=DEFAULT_PHONE, help=f"Phone number to remove (default: {DEFAULT_PHONE})")
+    parser = argparse.ArgumentParser(description="Delete conversations from the database by phone number")
+    parser.add_argument(
+        "--phone",
+        nargs="*",
+        default=list(DEFAULT_PHONES),
+        help="Phone number(s) to remove (default: %(default)s)",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Only show what would be deleted")
     args = parser.parse_args()
 
-    phone = args.phone.strip()
-    if not phone:
+    phones = _normalize_phone_list(args.phone)
+    if not phones:
         raise SystemExit("Phone number cannot be empty")
 
-    result = asyncio.run(delete_conversation_by_phone(phone, dry_run=args.dry_run))
-    if result == 0:
+    results = []
+    for phone in phones:
+        results.append(asyncio.run(delete_conversation_by_phone(phone, dry_run=args.dry_run)))
+
+    if all(result == 0 for result in results):
         raise SystemExit(0)
 
 
