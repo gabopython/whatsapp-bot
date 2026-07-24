@@ -100,6 +100,21 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+    .chat-item-tags {
+      display: flex;
+      gap: 4px;
+      margin-top: 4px;
+      flex-wrap: wrap;
+    }
+    .tag {
+      display: inline-block;
+      background: #128c7e;
+      color: white;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      white-space: nowrap;
+    }
     .chat-view {
       flex: 1;
       display: flex;
@@ -266,6 +281,15 @@
           <div style="padding: 16px; border-bottom: 1px solid #e5e5e5;">
             <div id="chat-title" style="font-size: 16px; font-weight: 600;"></div>
             <div id="chat-meta" style="font-size: 12px; color: #999;"></div>
+            <div style="margin-top: 12px; display: flex; gap: 8px; align-items: flex-start;">
+              <div id="chat-tags-display" style="flex: 1;"></div>
+              <button id="edit-tags-btn" style="padding: 4px 8px; background: #f0f0f0; border: 1px solid #e5e5e5; border-radius: 6px; cursor: pointer; font-size: 12px;">Edit Tags</button>
+            </div>
+            <div id="chat-tags-edit" style="margin-top: 12px; display: none; gap: 8px; align-items: center;">
+              <input id="tags-input" type="text" placeholder="Enter tags separated by commas..." style="flex: 1; padding: 8px 12px; border: 1px solid #e5e5e5; border-radius: 6px; font-size: 13px;">
+              <button id="save-tags-btn" style="padding: 6px 12px; background: #128c7e; color: white; border: 0; border-radius: 6px; cursor: pointer; font-size: 12px;">Save</button>
+              <button id="cancel-tags-btn" style="padding: 6px 12px; background: #f0f0f0; border: 1px solid #e5e5e5; border-radius: 6px; cursor: pointer; font-size: 12px;">Cancel</button>
+            </div>
           </div>
           <div class="status" id="status"></div>
           <div class="messages-view">
@@ -290,10 +314,34 @@
     const messagesContent = document.querySelector("#messages-content");
     const sendForm = document.querySelector("#send-form");
     const statusEl = document.querySelector("#status");
+    const chatTagsDisplay = document.querySelector("#chat-tags-display");
+    const chatTagsEdit = document.querySelector("#chat-tags-edit");
+    const editTagsBtn = document.querySelector("#edit-tags-btn");
+    const saveTagsBtn = document.querySelector("#save-tags-btn");
+    const cancelTagsBtn = document.querySelector("#cancel-tags-btn");
+    const tagsInput = document.querySelector("#tags-input");
     const pageSize = 50;
     let offset = 0;
     let selectedPhone = null;
     let allConversations = [];
+
+    function parseTags(tagString) {
+      if (!tagString.trim()) return [];
+      return tagString.split(",").map(tag => tag.trim()).filter(Boolean);
+    }
+
+    function renderTagElements(tags) {
+      return tags.map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join("");
+    }
+
+    function displayTags(conversation) {
+      const tags = parseTags(conversation.tags);
+      if (tags.length === 0) {
+        chatTagsDisplay.innerHTML = '<span style="color: #999; font-size: 12px;">No tags</span>';
+      } else {
+        chatTagsDisplay.innerHTML = `<div class="chat-item-tags">${renderTagElements(tags)}</div>`;
+      }
+    }
 
     async function loadConversations() {
       const params = new URLSearchParams({ limit: pageSize, offset });
@@ -368,6 +416,8 @@
           ? '[image/video attachment]'
           : preview.substring(0, 40);
         const lastUpdated = new Date(conv.updated_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        const tags = parseTags(conv.tags);
+        const tagsHtml = tags.length > 0 ? `<div class="chat-item-tags">${renderTagElements(tags.slice(0, 2))}</div>` : '';
         return `
           <li class="chat-item ${selectedPhone === conv.phone ? 'active' : ''}" data-phone="${conv.phone}">
             <div class="chat-item-header">
@@ -375,6 +425,7 @@
               <span class="chat-item-time">${lastUpdated}</span>
             </div>
             <div class="chat-item-preview">${previewText}...</div>
+            ${tagsHtml}
           </li>
         `;
       }).join("");
@@ -391,15 +442,71 @@
 
       chatTitle.textContent = phone;
       chatMeta.textContent = `Updated ${new Date(conv.updated_at).toLocaleString()}`;
+      displayTags(conv);
       renderMessages(conv.messages);
       noChat.style.display = "none";
       chatContent.style.display = "flex";
+      chatTagsEdit.style.display = "none";
+      tagsInput.value = conv.tags;
       renderChatList();
     }
 
     phoneFilter.addEventListener("input", () => {
       offset = 0;
       loadConversations();
+    });
+
+    editTagsBtn.addEventListener("click", () => {
+      chatTagsDisplay.parentElement.style.display = "none";
+      chatTagsEdit.style.display = "flex";
+      tagsInput.focus();
+    });
+
+    cancelTagsBtn.addEventListener("click", () => {
+      chatTagsDisplay.parentElement.style.display = "flex";
+      chatTagsEdit.style.display = "none";
+      const conv = allConversations.find(c => c.phone === selectedPhone);
+      if (conv) tagsInput.value = conv.tags;
+    });
+
+    saveTagsBtn.addEventListener("click", async () => {
+      if (!selectedPhone) return;
+
+      saveTagsBtn.disabled = true;
+      try {
+        const formData = new FormData();
+        formData.set("tags", tagsInput.value);
+        const response = await fetch(`/tags/${selectedPhone}`, {
+          method: "POST",
+          body: formData
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || "Failed to update tags");
+        
+        const conv = allConversations.find(c => c.phone === selectedPhone);
+        if (conv) {
+          conv.tags = result.tags;
+          displayTags(conv);
+          renderChatList();
+        }
+        
+        chatTagsDisplay.parentElement.style.display = "flex";
+        chatTagsEdit.style.display = "none";
+      } catch (error) {
+        alert("Error updating tags: " + error.message);
+      } finally {
+        saveTagsBtn.disabled = false;
+      }
+    });
+
+    tagsInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        saveTagsBtn.click();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        cancelTagsBtn.click();
+      }
     });
 
     sendForm.addEventListener("submit", async (event) => {

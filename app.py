@@ -430,6 +430,27 @@ async def verify_webhook(request: Request) -> PlainTextResponse:
     raise HTTPException(status_code=403, detail="Webhook verification failed")
 
 
+@app.post("/tags/{phone}")
+async def update_tags(phone: str, tags: str = Form(default="")) -> dict[str, Any]:
+    async with SessionLocal() as session:
+        conversation = await session.scalar(
+            select(Conversation).where(Conversation.phone == phone)
+        )
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        conversation.tags = tags
+        conversation.updated_at = now_iso()
+        await session.commit()
+        await session.refresh(conversation)
+        
+        return {
+            "ok": True,
+            "phone": conversation.phone,
+            "tags": conversation.tags,
+        }
+
+
 @app.post("/webhook")
 async def receive_webhook(request: Request) -> dict[str, Any]:
     payload = await request.json()
