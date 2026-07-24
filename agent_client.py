@@ -1,3 +1,4 @@
+import asyncio
 import os
 
 import httpx
@@ -11,13 +12,27 @@ class AgentClient:
     def __init__(self, base_url: str = "http://192.168.1.121:11434"):
         self.base_url = base_url
         timeout = float(os.getenv("LLM_TIMEOUT_SECONDS", "180"))
+        self.max_retries = int(os.getenv("LLM_MAX_RETRIES", "2"))
+        self.retry_delay = float(os.getenv("LLM_RETRY_DELAY_SECONDS", "1"))
         self.client = httpx.AsyncClient(timeout=httpx.Timeout(timeout))
 
     async def generate(self, model: str, prompt: str) -> str:
-        response = await self.client.post(
-            f"{self.base_url}/api/generate",
-            json={"model": model, "prompt": prompt, "stream": False}
-        )
+        response = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = await self.client.post(
+                    f"{self.base_url}/api/generate",
+                    json={"model": model, "prompt": prompt, "stream": False},
+                )
+                break
+            except httpx.TransportError:
+                if attempt >= self.max_retries:
+                    raise
+                await asyncio.sleep(self.retry_delay * (2 ** attempt))
+
+        if response is None:
+            raise httpx.TransportError("No response from LLM server")
+
         response.raise_for_status()
         return response.json()["response"]
 
