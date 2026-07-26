@@ -6,12 +6,16 @@ from agent_client import AgentClient
 PROMPT = "how to dance on2"
 
 
-async def probe_ai() -> str:
+async def test_generate_agent() -> str:
     client = AgentClient()
     try:
         return await client.generate_agent(PROMPT)
     finally:
         await client.close()
+
+
+async def probe_ai() -> str:
+    return await test_generate_agent()
 
 
 async def main() -> int:
