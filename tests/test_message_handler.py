@@ -53,6 +53,38 @@ class IncomingMessageHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Conversation messages:\nthem:hi\nme:hello\nthem:how much?", agent_client.prompts[0])
         self.assertIn("Latest user message: how much?", agent_client.prompts[0])
 
+    async def test_handler_skips_ai_when_conversation_has_noia_tag(self) -> None:
+        class DummyAgentClient:
+            async def generate_agent(self, prompt: str) -> str:
+                raise AssertionError("generate_agent should not be called")
+
+        sent_messages: list[tuple[str, str]] = []
+        persisted_messages: list[tuple[str, str]] = []
+
+        async def fake_send_reply(to: str, body: str) -> None:
+            sent_messages.append((to, body))
+
+        async def fake_persist(phone: str, body: str) -> None:
+            persisted_messages.append((phone, body))
+
+        await handle_incoming_message(
+            phone="+593987654321",
+            body="hello",
+            agent_client=DummyAgentClient(),
+            send_reply=fake_send_reply,
+            persist_reply=fake_persist,
+            tags="vip, noia",
+        )
+
+        self.assertEqual(
+            sent_messages,
+            [("+593987654321", "Thanks for your message. I'll get back to you shortly.")],
+        )
+        self.assertEqual(
+            persisted_messages,
+            [("+593987654321", "Thanks for your message. I'll get back to you shortly.")],
+        )
+
     async def test_handler_persists_outbound_reply_when_persist_callback_is_provided(self) -> None:
         class DummyAgentClient:
             async def generate_agent(self, prompt: str) -> str:

@@ -331,6 +331,7 @@ async def store_webhook_messages(payload: dict[str, Any]) -> int:
                         phone=phone,
                         body=body,
                         conversation_history=conversation.messages if conversation else body,
+                        tags=conversation.tags if conversation else "",
                         send_reply=lambda to, reply: send_whatsapp_text(to=to, body=reply),
                         persist_reply=persist_reply,
                     )
