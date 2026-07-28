@@ -33,11 +33,17 @@ async def handle_incoming_message(
     if not body or not body.strip():
         return
     messages = (conversation_history or f"them:{body.strip()}").strip()
-
     if _conversation_has_tag(tags, "noia"):
         print(messages)
         print("=" * 80)
         print("noia    ", phone)
+        return
+
+    # If the incoming message contains an audio media tag, log and return
+    # Expected marker in body: 'media:audio' (case-insensitive)
+    if "media:audio" in body.lower():
+        print("audio message", phone)
+        print(body)
         return
 
     client = agent_client or AgentClient()
