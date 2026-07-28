@@ -34,7 +34,8 @@ async def handle_incoming_message(
         return
 
     if _conversation_has_tag(tags, "noia"):
-        print("noia")
+        print("noia    ", phone)
+        print(messages)
         return
 
     client = agent_client or AgentClient()
@@ -54,7 +55,6 @@ async def handle_incoming_message(
         f"No digas la ubicación de Big Dance, solo si preguntan: multifamiliares Luluncoto a lado del colegio Montufar Quito\n\n"
         f"Sé amable, profesional y clara en cada mensaje. Espera la respuesta antes de pasar al siguiente paso y responde máximo con 25 palabras.\n\n"
         f"Conversation messages:\n{messages}\n"
-        f"Latest user message: {body.strip()}"
     )
 
     print("=" * 80)
