@@ -10,15 +10,18 @@ from typing import Any
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, Query, Request
-
-from message_handler import handle_incoming_message
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import Integer, String, Text, desc, event, inspect, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from message_handler import handle_incoming_message
+
 load_dotenv()
+
+# Ensure WhatsApp voice notes (ogg/opus) get the correct extension
+mimetypes.add_type("audio/ogg", ".ogg")
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +114,8 @@ def normalize_message_body(message: dict[str, Any]) -> str:
     if message_type == "text":
         return message.get("text", {}).get("body", "")
 
-    if message_type in {"image", "video"}:
+    # Added "audio", "voice", and "document" to supported media types
+    if message_type in {"image", "video", "audio", "voice", "document"}:
         media_payload = message.get(message_type) or {}
         caption = (
             message.get("caption", {}).get("body", "")
@@ -126,7 +130,6 @@ def normalize_message_body(message: dict[str, Any]) -> str:
 
 
 def _find_existing_media_file(media_id: str) -> Path | None:
-    """Look for an already-downloaded file for this media id, regardless of extension."""
     if not MEDIA_DIR.exists():
         return None
     matches = sorted(MEDIA_DIR.glob(f"{media_id}.*"))
@@ -134,7 +137,6 @@ def _find_existing_media_file(media_id: str) -> Path | None:
 
 
 async def fetch_media_metadata(media_id: str) -> dict[str, Any]:
-    """Ask the Graph API for the temporary download URL + mime type for a media id."""
     if http_client is None:
         raise HTTPException(status_code=500, detail="HTTP client is not ready")
 
@@ -146,11 +148,6 @@ async def fetch_media_metadata(media_id: str) -> dict[str, Any]:
 
 
 async def download_and_store_media(media_id: str) -> Path:
-    """
-    Download the actual media bytes from WhatsApp/Graph (the temporary URL requires
-    the same Authorization header we already send on http_client) and persist them
-    locally so they can be served afterwards without re-hitting Meta's expiring URLs.
-    """
     existing = _find_existing_media_file(media_id)
     if existing is not None:
         return existing
@@ -177,13 +174,10 @@ async def download_and_store_media(media_id: str) -> Path:
 
 
 async def resolve_media_url(message: dict[str, Any]) -> str:
-    """
-    Download the media (if not already cached) and return a local, stable URL that
-    the frontend can fetch directly (e.g. in an <img> or <video> tag) without needing
-    the WhatsApp access token.
-    """
     message_type = message.get("type", "")
-    if message_type not in {"image", "video"}:
+    
+    # Allow mapping for audio, voice and documents
+    if message_type not in {"image", "video", "audio", "voice", "document"}:
         return ""
 
     media_payload = message.get(message_type) or {}
@@ -194,8 +188,6 @@ async def resolve_media_url(message: dict[str, Any]) -> str:
     try:
         file_path = await download_and_store_media(media_id)
     except HTTPException:
-        # Fall back to exposing the on-demand proxy endpoint even if the eager
-        # download failed (e.g. transient network issue); it will retry on access.
         return f"{MEDIA_URL_PREFIX}/{media_id}"
 
     return f"{MEDIA_URL_PREFIX}/{file_path.name}"
@@ -206,7 +198,8 @@ async def build_message_body(message: dict[str, Any]) -> str:
     if message_type == "text":
         return message.get("text", {}).get("body", "")
 
-    if message_type in {"image", "video"}:
+    # Expanded to handle audio/voice messages securely 
+    if message_type in {"image", "video", "audio", "voice", "document"}:
         media_payload = message.get(message_type) or {}
         caption = (
             message.get("caption", {}).get("body", "")
@@ -425,13 +418,6 @@ async def send_message(
 
 @app.get(f"{MEDIA_URL_PREFIX}/{{media_id}}")
 async def get_media(media_id: str) -> FileResponse:
-    """
-    Serve a piece of media (image/video/document) by its WhatsApp media id.
-    Downloads and caches it locally on first request if it hasn't been fetched yet
-    (e.g. if the eager download during webhook processing failed).
-    Note: StaticFiles above already serves files by their exact stored filename
-    (id + real extension); this route additionally allows lookup by bare id.
-    """
     existing = _find_existing_media_file(media_id)
     if existing is not None:
         return FileResponse(existing)

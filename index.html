@@ -463,6 +463,20 @@
         `;
       }
 
+      if (content.startsWith('media:audio:')) {
+        const mediaData = content.slice('media:audio:'.length);
+        const [mediaUrl = '', ...captionParts] = mediaData.split('|');
+        const caption = captionParts.join('|');
+        return `
+          <div class="message-line ${bubbleClass}">
+            <div class="message-bubble">
+              ${mediaUrl ? `<audio controls preload="metadata" src="${escapeHtml(mediaUrl)}"></audio>` : '<div class="message-placeholder">Audio attachment unavailable</div>'}
+              ${caption ? `<div class="message-caption">${escapeHtml(caption)}</div>` : ''}
+            </div>
+          </div>
+        `;
+      }
+
       return `
         <div class="message-line ${bubbleClass}">
           <div class="message-bubble">
@@ -480,8 +494,8 @@
     function renderChatList() {
       chatList.innerHTML = allConversations.map((conv) => {
         const preview = conv.messages.split('\n').filter(Boolean)[0] || '';
-        const previewText = preview.startsWith('media:image:') || preview.startsWith('media:video:')
-          ? '[image/video attachment]'
+        const previewText = preview.startsWith('media:')
+          ? '[media attachment]'
           : preview.substring(0, 40);
         const lastUpdated = new Date(conv.updated_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
         const tags = parseTags(conv.tags);
