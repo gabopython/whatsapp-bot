@@ -32,14 +32,15 @@ async def handle_incoming_message(
     """
     if not body or not body.strip():
         return
+    messages = (conversation_history or f"them:{body.strip()}").strip()
 
     if _conversation_has_tag(tags, "noia"):
-        print("noia    ", phone)
         print(messages)
+        print("=" * 80)
+        print("noia    ", phone)
         return
 
     client = agent_client or AgentClient()
-    messages = (conversation_history or f"them:{body.strip()}").strip()
 
     prompt = (
         f"Eres Gaby, jefe de Recursos Humanos de Big Dance especializada en reclutamiento de bailarinas de bachata para convertirse en instructoras.\n\n"
@@ -66,7 +67,7 @@ async def handle_incoming_message(
         reply = await client.generate_agent(prompt)
     except httpx.HTTPError:
         logger.exception("Failed to generate LLM reply")
-        print("ia failed")
+        print("ia failed1")
         return
 
     reply_body = reply.strip() if reply else ""
