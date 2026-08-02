@@ -32,6 +32,7 @@ WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN", "")
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "verify-token")
 API_VERSION = os.getenv("API_VERSION", "v25.0")
 WEBHOOK_QUEUE_SIZE = int(os.getenv("WEBHOOK_QUEUE_SIZE", "1000"))
+REPLY_DELAY_SECONDS = float(os.getenv("REPLY_DELAY_SECONDS", "60"))
 
 MEDIA_DIR = Path(os.getenv("MEDIA_DIR", str(APP_DIR / "media")))
 MEDIA_URL_PREFIX = "/media"
@@ -88,6 +89,7 @@ if DATABASE_URL.startswith("sqlite"):
 webhook_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=WEBHOOK_QUEUE_SIZE)
 worker_task: asyncio.Task[None] | None = None
 http_client: httpx.AsyncClient | None = None
+pending_reply_batches: dict[str, dict[str, Any]] = {}
 
 
 def _ensure_conversation_columns(sync_conn: Any) -> None:
@@ -367,6 +369,63 @@ async def webhook_worker() -> None:
             webhook_queue.task_done()
 
 
+async def _schedule_delayed_reply(
+    phone: str,
+    *,
+    body: str,
+    conversation_history: str,
+    tags: str,
+) -> None:
+    if not body or not body.strip():
+        return
+
+    if "media:audio" in body.lower():
+        return
+
+    pending = pending_reply_batches.get(phone)
+    if pending is None:
+        pending = {
+            "body": body,
+            "conversation_history": conversation_history,
+            "tags": tags,
+            "send_reply": lambda to, reply: send_whatsapp_text(to=to, body=reply),
+        }
+        pending_reply_batches[phone] = pending
+
+        async def _run_delayed_reply() -> None:
+            await asyncio.sleep(REPLY_DELAY_SECONDS)
+            current_pending = pending_reply_batches.get(phone)
+            if current_pending is not pending:
+                return
+            pending_reply_batches.pop(phone, None)
+
+            async def persist_reply(to: str, reply: str) -> None:
+                async with SessionLocal() as reply_session:
+                    await save_message(
+                        reply_session,
+                        direction="me",
+                        phone=to,
+                        body=reply,
+                    )
+
+            await handle_incoming_message(
+                phone=phone,
+                body=current_pending["body"],
+                conversation_history=current_pending["conversation_history"],
+                tags=current_pending["tags"],
+                send_reply=current_pending["send_reply"],
+                persist_reply=persist_reply,
+                delay_seconds=0.0,
+            )
+
+        asyncio.create_task(_run_delayed_reply())
+        return
+
+    pending["body"] = body
+    pending["conversation_history"] = conversation_history
+    pending["tags"] = tags
+
+
 async def store_webhook_messages(payload: dict[str, Any]) -> int:
     stored = 0
     async with SessionLocal() as session:
@@ -387,21 +446,11 @@ async def store_webhook_messages(payload: dict[str, Any]) -> int:
                         select(Conversation).where(Conversation.phone == phone)
                     )
 
-                    async def persist_reply(to: str, reply: str) -> None:
-                        await save_message(
-                            session,
-                            direction="me",
-                            phone=to,
-                            body=reply,
-                        )
-
-                    await handle_incoming_message(
+                    await _schedule_delayed_reply(
                         phone=phone,
                         body=body,
                         conversation_history=conversation.messages if conversation else body,
                         tags=conversation.tags if conversation else "",
-                        send_reply=lambda to, reply: send_whatsapp_text(to=to, body=reply),
-                        persist_reply=persist_reply,
                     )
                     stored += 1
     return stored

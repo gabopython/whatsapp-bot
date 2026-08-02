@@ -1,3 +1,4 @@
+import time
 import unittest
 
 import httpx
@@ -31,6 +32,33 @@ class IncomingMessageHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sent_messages, [("+593987654321", "hi there")])
         self.assertEqual(len(agent_client.prompts), 1)
         self.assertIn("hello", agent_client.prompts[0])
+
+    async def test_handler_waits_before_generating_reply_when_delay_is_requested(self) -> None:
+        class DummyAgentClient:
+            def __init__(self) -> None:
+                self.prompts: list[str] = []
+
+            async def generate_agent(self, prompt: str) -> str:
+                self.prompts.append(prompt)
+                return "delayed reply"
+
+        sent_messages: list[tuple[str, str]] = []
+
+        async def fake_send_reply(to: str, body: str) -> None:
+            sent_messages.append((to, body))
+
+        started_at = time.monotonic()
+        await handle_incoming_message(
+            phone="+593987654321",
+            body="hello",
+            agent_client=DummyAgentClient(),
+            send_reply=fake_send_reply,
+            delay_seconds=0.02,
+        )
+        elapsed = time.monotonic() - started_at
+
+        self.assertGreaterEqual(elapsed, 0.02)
+        self.assertEqual(sent_messages, [("+593987654321", "delayed reply")])
 
     async def test_handler_sends_conversation_history_to_agent(self) -> None:
         class DummyAgentClient:

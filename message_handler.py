@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Awaitable, Callable
 
@@ -23,6 +24,7 @@ async def handle_incoming_message(
     send_reply: Callable[[str, str], Awaitable[None]] | None = None,
     persist_reply: Callable[[str, str], Awaitable[None]] | None = None,
     tags: str = "",
+    delay_seconds: float = 60.0,
 ) -> None:
     """Generate an AI reply for an incoming message and send it back.
 
@@ -32,6 +34,10 @@ async def handle_incoming_message(
     """
     if not body or not body.strip():
         return
+
+    if delay_seconds > 0:
+        await asyncio.sleep(delay_seconds)
+
     messages = (conversation_history or f"them:{body.strip()}").strip()
     if _conversation_has_tag(tags, "noia"):
         print(messages)

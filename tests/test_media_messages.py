@@ -1,11 +1,19 @@
+import importlib
 import os
 import unittest
 
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
 
 from sqlalchemy import select
 
-from app import Conversation, SessionLocal, init_db, normalize_message_body, save_message
+import app as app_module
+
+app_module = importlib.reload(app_module)
+Conversation = app_module.Conversation
+SessionLocal = app_module.SessionLocal
+init_db = app_module.init_db
+normalize_message_body = app_module.normalize_message_body
+save_message = app_module.save_message
 
 
 class MediaMessageParsingTests(unittest.TestCase):

@@ -7,7 +7,12 @@ from sqlalchemy import delete, select
 
 from app import Conversation, SessionLocal, init_db
 
-DEFAULT_PHONE: Final[str] = "593962052098"
+DEFAULT_PHONES: Final[tuple[str, ...]] = (
+    "593962052098",
+    "593998435259",
+    "593996818841",
+)
+DEFAULT_PHONE: Final[str] = DEFAULT_PHONES[0]
 
 async def delete_conversation_by_phone(phone: str, *, dry_run: bool = False) -> int:
     await init_db()
@@ -29,7 +34,15 @@ async def delete_conversation_by_phone(phone: str, *, dry_run: bool = False) -> 
 
 
 def _normalize_phone_list(phone_args: list[str]) -> list[str]:
-    return [phone.strip() for phone in phone_args if phone and phone.strip()]
+    phones: list[str] = []
+    for raw_phone in phone_args:
+        if not raw_phone or not raw_phone.strip():
+            continue
+        for part in raw_phone.split(","):
+            phone = part.strip()
+            if phone:
+                phones.append(phone)
+    return phones
 
 
 def main() -> None:
