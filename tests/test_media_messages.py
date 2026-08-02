@@ -63,6 +63,32 @@ class ConversationPersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(conversation.sent_messages_count, 1)
         self.assertEqual(conversation.tags, "vip")
 
+    async def test_fifth_sent_message_adds_noia_tag(self) -> None:
+        async with SessionLocal() as session:
+            for _ in range(4):
+                await save_message(
+                    session,
+                    direction="me",
+                    phone="+987654321",
+                    body="hello",
+                )
+
+            await save_message(
+                session,
+                direction="me",
+                phone="+987654321",
+                body="hello again",
+            )
+
+        async with SessionLocal() as session:
+            conversation = await session.scalar(
+                select(Conversation).where(Conversation.phone == "+987654321")
+            )
+
+        self.assertIsNotNone(conversation)
+        self.assertEqual(conversation.sent_messages_count, 5)
+        self.assertIn("noia", [tag.strip().lower() for tag in conversation.tags.split(",") if tag.strip()])
+
 
 if __name__ == "__main__":
     unittest.main()

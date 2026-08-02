@@ -234,8 +234,16 @@ async def save_message(
         conversation.updated_at = now_iso()
         if direction == "me":
             conversation.sent_messages_count += 1
+            if conversation.sent_messages_count == 5:
+                current_tags = [tag.strip() for tag in conversation.tags.split(",") if tag.strip()]
+                if "noia" not in {tag.lower() for tag in current_tags}:
+                    conversation.tags = ",".join(current_tags + ["noia"])
         if tags:
             conversation.tags = tags
+            if direction == "me" and conversation.sent_messages_count == 5:
+                current_tags = [tag.strip() for tag in conversation.tags.split(",") if tag.strip()]
+                if "noia" not in {tag.lower() for tag in current_tags}:
+                    conversation.tags = ",".join(current_tags + ["noia"])
     else:
         conversation = Conversation(
             phone=phone,
@@ -243,6 +251,10 @@ async def save_message(
             sent_messages_count=1 if direction == "me" else 0,
             tags=tags,
         )
+        if direction == "me" and conversation.sent_messages_count == 5 and tags:
+            current_tags = [tag.strip() for tag in conversation.tags.split(",") if tag.strip()]
+            if "noia" not in {tag.lower() for tag in current_tags}:
+                conversation.tags = ",".join(current_tags + ["noia"])
         session.add(conversation)
 
     await session.commit()
