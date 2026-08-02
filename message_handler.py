@@ -32,11 +32,6 @@ async def handle_incoming_message(
     AI generation fails/returns empty output. Those cases are only logged
     to the console.
     """
-    if not body or not body.strip():
-        return
-
-    if delay_seconds > 0:
-        await asyncio.sleep(delay_seconds)
 
     messages = (conversation_history or f"them:{body.strip()}").strip()
     if _conversation_has_tag(tags, "noia"):
@@ -54,6 +49,30 @@ async def handle_incoming_message(
 
     client = agent_client or AgentClient()
 
+    if not _conversation_has_tag(tags, "ubicacion"):
+        prompt = (
+            "Eres un asistente de clasificación. Tu único trabajo es determinar si el usuario está preguntando por una dirección física, ubicación, dónde estamos o direcciones.\n"
+            "Responde con exactamente una palabra: SÍ o NO. No incluyas ningún otro texto.\n\n"
+            f"chat: {messages}"
+        )
+        try:
+            reply = await client.generate_router(prompt)
+        except httpx.HTTPError:
+            logger.exception("Failed to generate LLM reply")
+            print("router fail ubicacion")
+            return
+        reply_body = reply.strip() if reply else ""
+        print("router ubicacion", reply_body, phone)
+
+        # if persist_reply is not None:
+        #     await persist_reply(phone, reply_body)
+
+        # if send_reply is not None:
+        #     await send_reply(phone, reply_body)
+
+    if delay_seconds > 0:
+        await asyncio.sleep(delay_seconds)
+
     prompt = (
         f"Eres Gaby, jefe de Recursos Humanos de Big Dance especializada en reclutamiento de bailarinas de bachata para convertirse en instructoras.\n\n"
         f"Sigue siempre este orden exacto, solicitando una sola cosa por mensaje:\n"
@@ -67,13 +86,8 @@ async def handle_incoming_message(
         f"\nSi un dato no es compartido no insistas y continua\n\n"
         f"No digas la ubicación de Big Dance, solo si preguntan: multifamiliares Luluncoto a lado del colegio Montufar Quito\n\n"
         f"Sé amable y profesional. Espera la respuesta antes de pasar al siguiente paso y responde máximo con 20 palabras con saltos de línea.\n\n"
-        f"Conversation messages:\n{messages}\n"
+        f"chat:\n{messages}\n"
     )
-
-    print("=" * 80)
-    print(f"[PROMPT for {phone}]")
-    print(prompt)
-    print("=" * 80)
 
     try:
         reply = await client.generate_agent(prompt)
@@ -83,9 +97,6 @@ async def handle_incoming_message(
         return
 
     reply_body = reply.strip() if reply else ""
-    if not reply_body:
-        print("ia failed")
-        return
 
     if persist_reply is not None:
         await persist_reply(phone, reply_body)
