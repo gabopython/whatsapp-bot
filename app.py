@@ -9,7 +9,7 @@ from typing import Any
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, Form, HTTPException, Query, Request
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import Integer, String, Text, desc, event, inspect, select, text
@@ -175,7 +175,7 @@ async def download_and_store_media(media_id: str) -> Path:
 
 async def resolve_media_url(message: dict[str, Any]) -> str:
     message_type = message.get("type", "")
-    
+
     # Allow mapping for audio, voice and documents
     if message_type not in {"image", "video", "audio", "voice", "document"}:
         return ""
@@ -198,7 +198,7 @@ async def build_message_body(message: dict[str, Any]) -> str:
     if message_type == "text":
         return message.get("text", {}).get("body", "")
 
-    # Expanded to handle audio/voice messages securely 
+    # Expanded to handle audio/voice messages securely
     if message_type in {"image", "video", "audio", "voice", "document"}:
         media_payload = message.get(message_type) or {}
         caption = (
@@ -263,6 +263,81 @@ async def send_whatsapp_text(to: str, body: str) -> dict[str, Any]:
         "to": to,
         "type": "text",
         "text": {"body": body},
+    }
+
+    response: httpx.Response | None = None
+    for attempt in range(4):
+        response = await http_client.post(url, json=payload)
+        if response.status_code != 429:
+            break
+        retry_after = response.headers.get("Retry-After")
+        delay = float(retry_after) if retry_after else min(2 ** attempt, 8)
+        await asyncio.sleep(delay)
+
+    if response is None:
+        raise HTTPException(status_code=502, detail="No response from WhatsApp API")
+    if response.is_error:
+        raise HTTPException(status_code=response.status_code, detail=response.text)
+    return response.json()
+
+
+async def upload_whatsapp_media(file_bytes: bytes, filename: str, mime_type: str) -> str:
+    """Upload local file bytes to the WhatsApp Media endpoint and return the media id."""
+    if not PHONE_NUMBER_ID or not WHATSAPP_TOKEN:
+        raise HTTPException(
+            status_code=500,
+            detail="Missing PHONE_NUMBER_ID or WHATSAPP_TOKEN in .env",
+        )
+    if http_client is None:
+        raise HTTPException(status_code=500, detail="HTTP client is not ready")
+
+    url = f"https://graph.facebook.com/{API_VERSION}/{PHONE_NUMBER_ID}/media"
+    files = {"file": (filename, file_bytes, mime_type)}
+    data = {"messaging_product": "whatsapp", "type": mime_type}
+
+    response = await http_client.post(url, data=data, files=files)
+    if response.is_error:
+        logger.warning("Failed to upload media %s: %s", filename, response.text)
+        raise HTTPException(status_code=response.status_code, detail=response.text)
+
+    result = response.json()
+    media_id = result.get("id")
+    if not media_id:
+        raise HTTPException(status_code=502, detail="WhatsApp API did not return a media id")
+    return media_id
+
+
+async def send_whatsapp_image(
+    to: str,
+    *,
+    image_url: str | None = None,
+    media_id: str | None = None,
+    caption: str | None = None,
+) -> dict[str, Any]:
+    if not PHONE_NUMBER_ID or not WHATSAPP_TOKEN:
+        raise HTTPException(
+            status_code=500,
+            detail="Missing PHONE_NUMBER_ID or WHATSAPP_TOKEN in .env",
+        )
+    if http_client is None:
+        raise HTTPException(status_code=500, detail="HTTP client is not ready")
+    if not image_url and not media_id:
+        raise HTTPException(status_code=400, detail="Either image_url or media_id must be provided")
+
+    image_payload: dict[str, Any] = {}
+    if media_id:
+        image_payload["id"] = media_id
+    else:
+        image_payload["link"] = image_url
+    if caption:
+        image_payload["caption"] = caption
+
+    url = f"https://graph.facebook.com/{API_VERSION}/{PHONE_NUMBER_ID}/messages"
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "image",
+        "image": image_payload,
     }
 
     response: httpx.Response | None = None
@@ -416,6 +491,65 @@ async def send_message(
     return {"ok": True, "phone": phone, "meta_response": response}
 
 
+@app.post("/send-image")
+async def send_image_message(
+    to: str = Form(...),
+    caption: str = Form(default=""),
+    tags: str = Form(default=""),
+    image_url: str | None = Form(default=None),
+    file: UploadFile | None = File(default=None),
+) -> dict[str, Any]:
+    """Send an image either from a public image_url or an uploaded file.
+
+    - If `file` is provided, it's uploaded to WhatsApp's Media API first (to get a media id),
+      and a local copy is kept in MEDIA_DIR so it can be viewed from this app too.
+    - If `image_url` is provided instead, WhatsApp fetches the image directly from that link.
+    """
+    if not image_url and not file:
+        raise HTTPException(status_code=400, detail="Provide either image_url or a file upload")
+
+    media_id: str | None = None
+    stored_url = image_url or ""
+
+    if file is not None:
+        file_bytes = await file.read()
+        if not file_bytes:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+        mime_type = (
+            file.content_type
+            or mimetypes.guess_type(file.filename or "")[0]
+            or "application/octet-stream"
+        )
+        media_id = await upload_whatsapp_media(file_bytes, file.filename or "image", mime_type)
+
+        # Keep a local copy so it can be served/viewed from this app too
+        extension = mimetypes.guess_extension(mime_type.split(";")[0].strip()) or ".bin"
+        MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+        local_path = MEDIA_DIR / f"{media_id}{extension}"
+        local_path.write_bytes(file_bytes)
+        stored_url = f"{MEDIA_URL_PREFIX}/{local_path.name}"
+
+    response = await send_whatsapp_image(
+        to,
+        image_url=image_url if not media_id else None,
+        media_id=media_id,
+        caption=caption or None,
+    )
+
+    body = f"media:image:{stored_url}|{caption}" if caption else f"media:image:{stored_url}"
+
+    async with SessionLocal() as session:
+        phone = await save_message(
+            session,
+            direction="me",
+            phone=to,
+            body=body,
+            tags=tags,
+        )
+    return {"ok": True, "phone": phone, "meta_response": response}
+
+
 @app.get(f"{MEDIA_URL_PREFIX}/{{media_id}}")
 async def get_media(media_id: str) -> FileResponse:
     existing = _find_existing_media_file(media_id)
@@ -447,12 +581,12 @@ async def update_tags(phone: str, tags: str = Form(default="")) -> dict[str, Any
         )
         if not conversation:
             raise HTTPException(status_code=404, detail="Conversation not found")
-        
+
         conversation.tags = tags
         conversation.updated_at = now_iso()
         await session.commit()
         await session.refresh(conversation)
-        
+
         return {
             "ok": True,
             "phone": conversation.phone,
