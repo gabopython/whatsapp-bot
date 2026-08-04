@@ -65,9 +65,9 @@ async def handle_incoming_message(
         )
         try:
             reply = await client.generate_router(prompt)
+            reply_body = reply.strip() if reply else ""
         except httpx.HTTPError:
             print("router fail ubicacion", phone)
-        reply_body = reply.strip() if reply else ""
         print("router ubicacion", reply_body, phone)
 
         if reply_body == "SI":
@@ -79,15 +79,15 @@ async def handle_incoming_message(
             return
 
     prompt = (
-        "Eres un asistente de clasificación. Tu única tarea es determinar si el usuario pregunta cómo pagar, solicita datos bancarios o desea separar un cupo del curso.\n"
+        "Eres un asistente de clasificación. Tu única tarea es determinar si el usuario pregunta cómo pagar, solicita datos bancarios, desea inscribirse o inscribir a su hijo o desea separar un cupo del curso.\n"
         "Responde con exactamente una palabra: SI o NO. No incluyas ningún otro texto.\n\n"
         f"chat: {last_message}"
     )
     try:
         reply = await client.generate_router(prompt)
+        reply_body = reply.strip() if reply else ""
     except httpx.HTTPError:
         print("router fail payment", phone)
-    reply_body = reply.strip() if reply else ""
     print("router payment", reply_body, phone)
 
     if reply_body == "SI":
@@ -122,11 +122,11 @@ async def handle_incoming_message(
 
     try:
         reply = await client.generate_agent(prompt)
+        reply_body = reply.strip() if reply else ""
     except httpx.HTTPError:
         print("ia failed1", phone)
         return
 
-    reply_body = reply.strip() if reply else ""
 
     if persist_reply is not None:
         await persist_reply(phone, reply_body)
