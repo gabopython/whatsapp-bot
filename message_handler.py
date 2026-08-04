@@ -50,50 +50,56 @@ async def handle_incoming_message(
     client = agent_client or AgentClient()
 
     if not _conversation_has_tag(tags, "ubicacion"):
+        # Extract only the last user message after the last 'me:' marker.
+        last_message = body.strip()
+        if conversation_history:
+            idx = conversation_history.lower().rfind("me:")
+            if idx != -1:
+                last_message = conversation_history[idx:].strip()
+        
         prompt = (
             "Eres un asistente de clasificación. Tu único trabajo es determinar si el usuario está preguntando por una dirección física, ubicación, dónde estamos o direcciones.\n"
-            "Responde con exactamente una palabra: SÍ o NO. No incluyas ningún otro texto.\n\n"
-            f"chat: {messages}"
+            "Responde con exactamente una palabra: SI o NO. No incluyas ningún otro texto.\n\n"
+            f"chat: {last_message}"
         )
         try:
             reply = await client.generate_router(prompt)
         except httpx.HTTPError:
-            logger.exception("Failed to generate LLM reply")
-            print("router fail ubicacion")
-            return
+            print("router fail ubicacion", phone)
         reply_body = reply.strip() if reply else ""
         print("router ubicacion", reply_body, phone)
 
-        # if persist_reply is not None:
-        #     await persist_reply(phone, reply_body)
+        if reply_body == "SI":
+            if persist_reply is not None:
+                await persist_reply(phone, 'https://maps.app.goo.gl/VtPrgAcFKQ76F5387')
 
-        # if send_reply is not None:
-        #     await send_reply(phone, reply_body)
+            if send_reply is not None:
+                await send_reply(phone, 'https://maps.app.goo.gl/VtPrgAcFKQ76F5387')
+            
 
     if delay_seconds > 0:
         await asyncio.sleep(delay_seconds)
 
     prompt = (
-        f"Eres Gaby, jefe de Recursos Humanos de Big Dance especializada en reclutamiento de bailarinas de bachata para convertirse en instructoras.\n\n"
-        f"Sigue siempre este orden exacto, solicitando una sola cosa por mensaje:\n"
-        f"1. Primero solicita la información básica: nombre, edad y sector de residencia.\n"
-        f"2. Después pide que envíe username de su Instagram y Tiktok.\n"
-        f"3. Luego solicita su disponibilidad en la semana para dar clases.\n"
-        f"4. Solicita un video vertical de máximo 30 segundos donde la postulante hable directamente a cámara explicando sus preferencias en:\n"
-        f"   - Bachata (fusión, actual, tradicional, etc.)\n"
-        f"   - Salsa (línea, cubana, on2, etc.)\n\n"
-        f"5. El siguiente paso es una entrevista presencial en el cc Recreo, pregunta día y hora.\n"
-        f"\nSi un dato no es compartido no insistas y continua\n\n"
-        f"No digas la ubicación de Big Dance, solo si preguntan: multifamiliares Luluncoto a lado del colegio Montufar Quito\n\n"
-        f"Sé amable y profesional. Espera la respuesta antes de pasar al siguiente paso y responde máximo con 20 palabras con saltos de línea.\n\n"
+        "Eres Fer, profe de Bachata en Big Dance. " 
+        "Vendes con entusiasmo el curso vacacional de Salsa y Bachata repondes máximo con 15 palabras.\n\n"
+        "Debes enviar como primer mensaje: " 
+        "Hola soy Fer. Tienes alguna pregunta? o deseas reservar un cupo antes que se cierren las inscripciones del curso vacacional de Salsa y Bachata?\n"
+        "Y solo si te preguntan respondes la info general:\n"
+        "Horario: Miércoles y viernes, 10 a 12.\n"
+        "Inicio: Viernes 7 de agosto (4 semanas).\n"
+        "Edad: 14 a 20 años.\n"
+        "Lugar: Casa comunal multifamiliares luluncoto.\n"
+        "Pago: Banco Pichincha, Ahorro transaccional 2207853165, Gabriel Revelo León.\n"
+        "Inversión: $20 USD\n"
+        "+4 instructoras\n\n"
         f"chat:\n{messages}\n"
     )
 
     try:
         reply = await client.generate_agent(prompt)
     except httpx.HTTPError:
-        logger.exception("Failed to generate LLM reply")
-        print("ia failed1")
+        print("ia failed1", phone)
         return
 
     reply_body = reply.strip() if reply else ""

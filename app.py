@@ -238,6 +238,11 @@ async def save_message(
                 current_tags = [tag.strip() for tag in conversation.tags.split(",") if tag.strip()]
                 if "noia" not in {tag.lower() for tag in current_tags}:
                     conversation.tags = ",".join(current_tags + ["noia"])
+        # If the outbound message is a location/map link, add the 'ubicacion' tag
+        if direction == "me" and "maps.app.goo.gl" in body:
+            current_tags = [tag.strip() for tag in conversation.tags.split(",") if tag.strip()]
+            if "ubicacion" not in {tag.lower() for tag in current_tags}:
+                conversation.tags = ",".join(current_tags + ["ubicacion"]) if current_tags else "ubicacion"
         if tags:
             conversation.tags = tags
             if direction == "me" and conversation.sent_messages_count == 5:
@@ -251,6 +256,12 @@ async def save_message(
             sent_messages_count=1 if direction == "me" else 0,
             tags=tags,
         )
+        # If creating a new conversation and the first outbound message is a maps link,
+        # ensure the 'ubicacion' tag is applied.
+        if direction == "me" and "maps.app.goo.gl" in body:
+            current_tags = [tag.strip() for tag in conversation.tags.split(",") if tag.strip()]
+            if "ubicacion" not in {tag.lower() for tag in current_tags}:
+                conversation.tags = ",".join(current_tags + ["ubicacion"]) if current_tags else "ubicacion"
         if direction == "me" and conversation.sent_messages_count == 5 and tags:
             current_tags = [tag.strip() for tag in conversation.tags.split(",") if tag.strip()]
             if "noia" not in {tag.lower() for tag in current_tags}:
