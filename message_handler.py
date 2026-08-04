@@ -110,7 +110,7 @@ async def handle_incoming_message(
         "Inicio: Viernes 7 de agosto (4 semanas).\n"
         "Inversión: $20 USD\n"
         "---------------------------\n"
-        "Información del adicional:\n"
+        "Información adicional(solo responder si preguntan):\n"
         "Edad: 14 a 20 años.\n"
         "Lugar: Casa comunal multifamiliares luluncoto.\n"
         "Pago: Banco Pichincha, Ahorro transaccional 2207853165, Gabriel Revelo León.\n"
