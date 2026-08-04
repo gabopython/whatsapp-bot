@@ -243,6 +243,11 @@ async def save_message(
             current_tags = [tag.strip() for tag in conversation.tags.split(",") if tag.strip()]
             if "ubicacion" not in {tag.lower() for tag in current_tags}:
                 conversation.tags = ",".join(current_tags + ["ubicacion"]) if current_tags else "ubicacion"
+        # If the outbound message contains the bank account, add the 'noia' tag
+        if direction == "me" and "2207853165" in body:
+            current_tags = [tag.strip() for tag in conversation.tags.split(",") if tag.strip()]
+            if "noia" not in {tag.lower() for tag in current_tags}:
+                conversation.tags = ",".join(current_tags + ["noia"]) if current_tags else "noia"
         if tags:
             conversation.tags = tags
             if direction == "me" and conversation.sent_messages_count == 5:
@@ -262,6 +267,11 @@ async def save_message(
             current_tags = [tag.strip() for tag in conversation.tags.split(",") if tag.strip()]
             if "ubicacion" not in {tag.lower() for tag in current_tags}:
                 conversation.tags = ",".join(current_tags + ["ubicacion"]) if current_tags else "ubicacion"
+        # If the first outbound message contains the bank account, ensure 'noia' is applied.
+        if direction == "me" and "2207853165" in body:
+            current_tags = [tag.strip() for tag in conversation.tags.split(",") if tag.strip()]
+            if "noia" not in {tag.lower() for tag in current_tags}:
+                conversation.tags = ",".join(current_tags + ["noia"]) if current_tags else "noia"
         if direction == "me" and conversation.sent_messages_count == 5 and tags:
             current_tags = [tag.strip() for tag in conversation.tags.split(",") if tag.strip()]
             if "noia" not in {tag.lower() for tag in current_tags}:
