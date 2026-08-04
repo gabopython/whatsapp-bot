@@ -72,10 +72,10 @@ async def handle_incoming_message(
 
         if reply_body == "SI":
             if persist_reply is not None:
-                await persist_reply(phone, 'https://maps.app.goo.gl/VtPrgAcFKQ76F5387\n\nCasa comunal multifamiliares luluncoto\na lado del colegio Montúfar')
+                await persist_reply(phone, 'https://maps.app.goo.gl/VtPrgAcFKQ76F5387\n\nCasa comunal multifamiliares Luluncoto\na lado del colegio Montúfar')
 
             if send_reply is not None:
-                await send_reply(phone, 'https://maps.app.goo.gl/VtPrgAcFKQ76F5387\n\nCasa comunal multifamiliares luluncoto\na lado del colegio Montúfar')
+                await send_reply(phone, 'https://maps.app.goo.gl/VtPrgAcFKQ76F5387\n\nCasa comunal multifamiliares Luluncoto\na lado del colegio Montúfar')
             return
 
     prompt = (
