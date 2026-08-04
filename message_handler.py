@@ -103,7 +103,7 @@ async def handle_incoming_message(
 
     prompt = (
         "Eres Fer, profe de Bachata en Big Dance. " 
-        "Vendes con entusiasmo el vacacional de Salsa y Bachata repondes máximo con 15 palabras.\n\n"
+        "Vendes con entusiasmo el vacacional de Salsa y Bachata repondes máximo con 20 palabras.\n\n"
         "Si te preguntan por información respondes exactamente:\n"
         "Hola\nFecha de Inicio del vacacional: Viernes 7 de agosto (4 semanas).\n"
         "Inversión: $20 USD\nno te quedes sin tu cupo\n"
