@@ -36,7 +36,6 @@ async def handle_incoming_message(
 
     messages = (conversation_history or f"them:{body.strip()}").strip()
     if _conversation_has_tag(tags, "noia"):
-        print(messages)
         print("=" * 80)
         print("noia    ", phone)
         return
@@ -55,6 +54,7 @@ async def handle_incoming_message(
         idx = conversation_history.lower().rfind("me:")
         if idx != -1:
             last_message = conversation_history[idx:].strip()
+    print("last message", last_message, phone)
         
 
     if not _conversation_has_tag(tags, "ubicacion"):
