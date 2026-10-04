@@ -39,7 +39,7 @@ async def handle_incoming_message(
         print("=" * 80)
         print("noia    ", phone)
         await persist_reply(phone, 'AQUI ESTOY')
-        await send_reply(phone, 'holaaa Celeste')
+        await send_reply(phone, 'AQUI ESTOY')
         return
 
     # If the incoming message contains an audio media tag, log and return
