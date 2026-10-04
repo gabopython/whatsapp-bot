@@ -38,7 +38,7 @@ async def handle_incoming_message(
     if _conversation_has_tag(tags, "noia"):
         print("=" * 80)
         print("noia    ", phone)
-        await persist_reply(phone, 'hola Celeste')
+        await persist_reply(phone, 'holaaa Celeste')
         await send_reply(phone, 'hola Celeste')
         return
 
